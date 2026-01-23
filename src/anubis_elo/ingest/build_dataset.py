@@ -11,9 +11,17 @@ def main():
     out_csv = Path("data/processed/anubis_mapstats_parsed.csv")
     out_csv.parent.mkdir(parents=True, exist_ok=True)
 
-    html_files = sorted(in_dir.glob("*.html")) + sorted(in_dir.glob("*.htm"))
+    html_files = list(in_dir.glob("*.html")) + list(in_dir.glob("*.htm"))
     if not html_files:
         raise FileNotFoundError(f"No HTML files found in: {in_dir}")
+
+    def sort_key(p: Path) -> int:
+        try:
+            return int(p.stem)
+        except Exception:
+            return 10**18
+
+    html_files.sort(key=sort_key)
 
     rows = []
     for p in html_files:
