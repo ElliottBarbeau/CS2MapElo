@@ -26,7 +26,13 @@ class ParsedMapStats:
     team1_rounds: Optional[int]
     team2_rounds: Optional[int]
 
+    team1_player_ids: list[int]
+    team2_player_ids: list[int]
     player_ids_10: list[int]
+
+    team1_player_names: list[str]
+    team2_player_names: list[str]
+    player_names_10: list[str]
 
     source_path: str
 
@@ -71,7 +77,6 @@ def _extract_team_names(soup: BeautifulSoup) -> tuple[Optional[str], Optional[st
 def _extract_anubis_map_block_score_and_name(
     soup: BeautifulSoup,
 ) -> tuple[Optional[str], Optional[int], Optional[int]]:
-    
     for block in soup.select(".stats-match-map-result"):
         full = block.select_one(".dynamic-map-name-full")
         if not full:
@@ -86,7 +91,8 @@ def _extract_anubis_map_block_score_and_name(
             return full_name, None, None
 
         txt = score_el.get_text(" ", strip=True)
-        parts = [p.strip() for p in txt.replace("–", "-").split("-")]
+        txt = txt.replace("–", "-").replace("—", "-")
+        parts = [p.strip() for p in txt.split("-")]
         if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
             return full_name, int(parts[0]), int(parts[1])
 
@@ -104,33 +110,41 @@ def _extract_rounds_fallback(soup: BeautifulSoup) -> tuple[Optional[int], Option
     return r1, r2
 
 
-def _extract_player_ids_from_stats_tables(soup: BeautifulSoup) -> list[int]:
-    """
-    On mapstats pages, player rows are in two tables:
-      table.stats-table.totalstats (one per team)
-    Player links are typically:
-      /stats/players/<id>/<slug>
+def _players_from_table(table) -> list[tuple[int, str]]:
+    found: list[tuple[int, str]] = []
+    for a in table.select('td.st-player a[href*="/stats/players/"]'):
+        href = a.get("href") or ""
+        m = STATS_PLAYER_ID_RE.search(href)
+        if not m:
+            continue
+        pid = int(m.group(1))
+        name = a.get_text(strip=True) or ""
+        found.append((pid, name))
 
-    Could be necessary for future when mapping player ids to actual player names
-    """
-    player_ids: list[int] = []
-
-    for table in soup.select("table.stats-table.totalstats"):
-        for a in table.select('td.st-player a[href*="/stats/players/"]'):
-            href = a.get("href") or ""
-            m = STATS_PLAYER_ID_RE.search(href)
-            if m:
-                player_ids.append(int(m.group(1)))
-
-    seen = set()
-    deduped: list[int] = []
-    for pid in player_ids:
+    seen: set[int] = set()
+    out: list[tuple[int, str]] = []
+    for pid, name in found:
         if pid in seen:
             continue
         seen.add(pid)
-        deduped.append(pid)
+        out.append((pid, name))
+    return out
 
-    return deduped
+
+def _extract_team_players(soup: BeautifulSoup) -> tuple[list[int], list[int], list[str], list[str]]:
+    tables = soup.select("table.stats-table.totalstats")
+    if len(tables) < 2:
+        return [], [], [], []
+
+    t1 = _players_from_table(tables[0])[:5]
+    t2 = _players_from_table(tables[1])[:5]
+
+    team1_ids = [pid for pid, _ in t1]
+    team2_ids = [pid for pid, _ in t2]
+    team1_names = [name for _, name in t1]
+    team2_names = [name for _, name in t2]
+
+    return team1_ids, team2_ids, team1_names, team2_names
 
 
 def parse_mapstats_html(html: str, source_path: str = "<memory>") -> ParsedMapStats:
@@ -138,7 +152,6 @@ def parse_mapstats_html(html: str, source_path: str = "<memory>") -> ParsedMapSt
 
     mapstats_id = _extract_mapstats_id(html, soup)
     event_name = _extract_event_name(soup)
-
     team1_name, team2_name = _extract_team_names(soup)
 
     map_name, team1_rounds, team2_rounds = _extract_anubis_map_block_score_and_name(soup)
@@ -147,7 +160,9 @@ def parse_mapstats_html(html: str, source_path: str = "<memory>") -> ParsedMapSt
         team1_rounds = team1_rounds if team1_rounds is not None else r1
         team2_rounds = team2_rounds if team2_rounds is not None else r2
 
-    player_ids = _extract_player_ids_from_stats_tables(soup)
+    team1_player_ids, team2_player_ids, team1_player_names, team2_player_names = _extract_team_players(soup)
+    player_ids_10 = (team1_player_ids + team2_player_ids)[:10]
+    player_names_10 = (team1_player_names + team2_player_names)[:10]
 
     return ParsedMapStats(
         mapstats_id=mapstats_id,
@@ -157,7 +172,12 @@ def parse_mapstats_html(html: str, source_path: str = "<memory>") -> ParsedMapSt
         team2_name=team2_name,
         team1_rounds=team1_rounds,
         team2_rounds=team2_rounds,
-        player_ids_10=player_ids[:10],
+        team1_player_ids=team1_player_ids,
+        team2_player_ids=team2_player_ids,
+        player_ids_10=player_ids_10,
+        team1_player_names=team1_player_names,
+        team2_player_names=team2_player_names,
+        player_names_10=player_names_10,
         source_path=str(source_path),
     )
 
