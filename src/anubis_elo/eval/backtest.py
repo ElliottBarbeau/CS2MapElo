@@ -285,7 +285,7 @@ def write_ratings(out_path: Path, ratings: Dict[int, float], stats: Dict[int, Di
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--in-csv", default="data/processed/anubis_mapstats_parsed.csv")
-    ap.add_argument("--out-csv", default="data/processed/anubis_player_elo.csv")
+    ap.add_argument("--out-csv", default="data/processed/anubis_player_elo_2025.csv")
     ap.add_argument("--k", type=float, default=24.0)
     ap.add_argument("--init", type=float, default=1500.0)
     ap.add_argument("--weight", choices=["none", "linear", "sqrt"], default="linear")
